@@ -113,3 +113,6 @@ def cos_sim(a: SparseVector, b: SparseVector):
     v1 = np.array(v1)
     v2 = np.array(v2)
     return float(v1 @ v2 / (np.linalg.norm(v1) * np.linalg.norm(v2)))
+
+def flat_map(f, xs):
+    return [y for ys in xs for y in f(ys)]
