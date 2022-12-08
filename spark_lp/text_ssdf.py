@@ -1,4 +1,3 @@
-from pprint import pprint
 from typing import Union, Set, List
 
 from pyspark.mllib.feature import HashingTF, IDF, IDFModel
@@ -6,11 +5,13 @@ from pyspark.ml.feature import CountVectorizer
 from pyspark import RDD, SparkContext
 from pyspark.mllib.linalg import SparseVector
 from pyspark.sql import SQLContext, SparkSession
+from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.functions import col, udf, current_timestamp
 
 from spark_lp.choices import Lang
 from spark_lp.itext import IText
 from spark_lp.text import Text
-from spark_lp.utils import split_to_sentences, split_to_words, normalize_sent, \
+from spark_lp.utils import flat_map, split_to_sentences, split_to_words, normalize_sent, \
     filter_stop_words, parse_sent, parse_obj_to_dict, tokenize_sent, \
     get_stop_words, cos_sim
 from langdetect import detect
@@ -19,21 +20,21 @@ import networkx as nx
 
 
 class TextRDD(IText):
-    def __init__(self, sc: SparkContext, text: str):
-        self.text: str = text
-        self._origin_sents: Union[RDD, None] = None
-        self._sents: Union[RDD, None] = None
-        self._words_info: Union[RDD, None] = None
-        self._words: Union[RDD, None] = None
+    def __init__(self, spark: SparkSession, text: DataFrame):
+        self.text: DataFrame = text
+        self._origin_sents: Union[DataFrame, None] = None
+        self._sents: Union[DataFrame, None] = None
+        self._words_info: Union[DataFrame, None] = None
+        self._words: Union[DataFrame, None] = None
         self._tf = None
         self.idf: Union[IDFModel, None] = None
         self._tfidf = None
-        self.sc: SparkContext = sc
-        self.spark = SparkSession(self.sc)
-        lang = detect(text)
-        if lang not in ['uk', 'ru']:
-            lang = 'uk'
-        self.lang: Lang = Lang(lang)
+        self.spark = SparkSession(spark)
+        # lang = detect(text)
+        # if lang not in ['uk', 'ru']:
+        #     lang = 'uk'
+        # self.lang: Lang = Lang(lang)
+        self.lang = Lang('uk')
 
     @property
     def sentences(self):
@@ -45,31 +46,46 @@ class TextRDD(IText):
 
     @property
     def words(self):
-        return self._words
+        return self.text
 
     def split_to_sentences(self):
-        sents = self.sc.parallelize(
-            split_to_sentences(self.text, is_cleaned=False))
+        split_sents = udf(
+            lambda e: split_to_sentences(e, is_cleaned=False),
+            ArrayType(StringType())
+        )
+        sents = self.text.withColumn("body_vec", split_sents("body")).withColumn("title_vec", split_sents("title"))
         self._origin_sents = sents
-        self._sents = sents.map(split_to_words)
+        split_words = udf(lambda sentences: list(map(lambda sentence: split_to_words(sentence), sentences)))
+        self.text = sents.withColumn("body_vec", split_words("body_vec")).withColumn("title_vec", split_words("title_vec"))
 
     def tokenize(self):
         lang = self.lang
-        self._sents = self._sents.map(
-            lambda sent: normalize_sent(sent, lang))
-        self._words_info = self._sents.flatMap(
-            lambda sent: tokenize_sent(sent, lang))
-        self._words = self._words_info.map(
-            lambda word_info: word_info['normal_form'])
+        norm_sent = udf(lambda sents: list(map(lambda sent: normalize_sent(sent, lang), sents)))
+        token_sent = udf(
+            lambda sents: flat_map(lambda sent: tokenize_sent(sent, lang), sents),
+            ArrayType(StructType([
+                StructField("number", StringType()),
+                StructField("gender", StringType()),
+                StructField("pos", StringType()),
+                StructField("normal_form", StringType()),
+                StructField("word", StringType()),
+                StructField("case", StringType())
+            ]))
+        )
+        reduce_sent = udf(lambda sents: list(map(lambda word: word['normal_form'], sents)))
+
+        self.text = self.text.withColumn("body_vec", norm_sent("body_vec")).withColumn("title_vec", norm_sent("title_vec"))
+        self.text = self.text.withColumn("body_wvec", token_sent("body_vec")).withColumn("title_wvec", token_sent("title_vec"))
+        self.text = self.text.withColumn("body_wvec", reduce_sent("body_wvec")).withColumn("title_wvec", reduce_sent("title_wvec"))
 
     def filter_stop_words(self, stop_words=None):
         lang = self.lang
         stop_words = stop_words or get_stop_words(self.lang)
-        self._sents = self._sents.map(
-            lambda sent: filter_stop_words(sent, stop_words, lang))
-        self._words = self._words.filter(
-            lambda word: word not in stop_words
-        )
+        filter_words = udf(lambda sents: list(map(lambda sent: filter_stop_words(sent, stop_words, lang), sents)))
+        stop = udf(lambda sents: list(filter(lambda word: word not in stop_words, sents)))
+
+        self.text = self.text.withColumn("body_vec", filter_words("body_vec")).withColumn("title_vec", filter_words("title_vec"))
+        self.text = self.text.withColumn("body_wvec", stop("body_wvec")).withColumn("title_wvec", stop("title_wvec"))
 
     def process(self):
         self.split_to_sentences()
@@ -77,12 +93,12 @@ class TextRDD(IText):
         self.filter_stop_words()
         return self
 
-    def sumarize(self):
-        vertices = self._sents.zipWithIndex()
+    def sumarize(self, rdd):
+        vertices = rdd.zipWithIndex()
         vertices_df = vertices.toDF(['words', 'id'])
         pairs = vertices.cartesian(vertices).filter(
             lambda pair: pair[0][1] < pair[1][1])
-        self.tfidf()
+        self.tfidf(rdd)
         tfidfs = self._tfidf
         edges = pairs.map(lambda pair: (
             pair[0][1], pair[1][1], cos_sim(tfidfs[pair[0][1]],
@@ -91,7 +107,7 @@ class TextRDD(IText):
         g = nx.Graph()
         g.add_weighted_edges_from(edges.collect())
         pr = nx.pagerank(g)
-        res = sorted(((i, pr[i], s) for i, s in enumerate(self._origin_sents.collect()) if i in pr),
+        res = sorted(((i, pr[i], s) for i, s in enumerate(rdd.collect()) if i in pr),
                key=lambda x: pr[x[0]], reverse=True)
         print('\n'.join([str(r) for r in res]))
         # edges_df = edges.toDF(['src', 'dst', 'weight'])
@@ -102,8 +118,8 @@ class TextRDD(IText):
         # ranked_sents.vertices.show(truncate=False)
         # print(ranked_sents.vertices.select(['id', 'pagerank']).rdd.sortBy(lambda row: row.pagerank).collect())
 
-    def tfidf(self):
-        tf = HashingTF().transform(self._sents)
+    def tfidf(self, rdd):
+        tf = HashingTF().transform(rdd)
         self._tf = tf
         tf.cache()
         idf = IDF().fit(tf)
@@ -115,7 +131,6 @@ class TextRDD(IText):
     def get_tfidf(idf, sentence: List[str]) -> SparseVector:
         tf = HashingTF().transform(sentence)
         return idf.transform(tf)
-
 
 class TextsCorpus:
     def __init__(self, sc: SparkContext, texts: Union[List, RDD]):

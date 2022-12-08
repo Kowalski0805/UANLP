@@ -14,6 +14,7 @@ from spark_lp.stop_words import stop_words_dict
 text_separators = '\s*[.!?]+\s*'
 sent_separators = '[,:;\ \-—"]+'
 
+morphs = {l: MorphAnalyzer(lang=l.value) for l in [Lang.UK, Lang.RU]}
 
 def clean_text(text: str) -> str:
     text = re.sub('\n+', ' ', text)
@@ -32,13 +33,11 @@ def split_to_words(sentence: str) -> List[str]:
 
 
 def normalize_word(word: str, lang: Lang = Lang.UK, deep=False) -> str:
-    morph = MorphAnalyzer(lang=lang.value)
-
-    norm = morph.parse(word.lower())[0].normal_form
+    norm = morphs[lang].parse(word.lower())[0].normal_form
     if deep:
         while norm != word:
             word = norm
-            norm = morph.parse(word.lower())[0].normal_form
+            norm = morphs[lang].parse(word.lower())[0].normal_form
 
     return norm
 
@@ -50,8 +49,7 @@ def normalize_sent(
 
 
 def parse_sent(sentence: List[str], lang: Lang = Lang.UK) -> List[Parse]:
-    morph = MorphAnalyzer(lang=lang.value)
-    return [morph.parse(word)[0] for word in sentence]
+    return [morphs[lang].parse(word)[0] for word in sentence]
 
 
 def parse_obj_to_dict(parse_obj: Parse) -> dict:
@@ -66,8 +64,7 @@ def parse_obj_to_dict(parse_obj: Parse) -> dict:
 
 
 def tokenize_sent(sentence: List[str], lang: Lang = Lang.UK) -> List[dict]:
-    morph = MorphAnalyzer(lang=lang.value)
-    words = [morph.parse(word)[0] for word in sentence]
+    words = [morphs[lang].parse(word)[0] for word in sentence]
     words_info = []
     for word in words:
         word_info = parse_obj_to_dict(word)
