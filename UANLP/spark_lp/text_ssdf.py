@@ -19,7 +19,7 @@ from pyspark.sql.types import *
 import networkx as nx
 
 
-class TextRDD(IText):
+class TextDataFrame(IText):
     def __init__(self, spark: SparkSession, text: DataFrame):
         self.text: DataFrame = text
         self._origin_sents: Union[DataFrame, None] = None

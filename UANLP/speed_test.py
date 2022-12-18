@@ -5,7 +5,7 @@ from pyspark.conf import SparkConf
 from pyspark.sql.session import SparkSession
 from pyspark.sql.functions import col, udf, current_timestamp, lit
 from pyspark.mllib.feature import HashingTF
-from spark_lp.text_ssdf import TextRDD
+from spark_lp.text_ssdf import TextDataFrame
 from spark_lp.text import Text
 import pyspark.sql.functions as F
 from pyspark.sql.types import FloatType
@@ -26,9 +26,12 @@ if __name__ == "__main__":
 
     es = Elasticsearch([{'host': 'elasticsearch', 'port': '9200'}])
 
-    df = spark.readStream.schema("author STRING, body STRING, category STRING, date TIMESTAMP, link STRING, title STRING").format("json").option("path", "data/").load()
+    df = spark.readStream.format("kafka") \
+    .option("kafka.bootstrap.servers", "kafka:9092") \
+    .option("subscribe", "topic1") \
+    .load()
 
-    text = TextRDD(spark, df)
+    text = TextDataFrame(spark, df)
     text.process()
 
     def handleRow(d, i):
