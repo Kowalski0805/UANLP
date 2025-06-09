@@ -2,9 +2,9 @@ from typing import Union, List
 
 from langdetect import detect
 
-from spark_lp.choices import Lang
-from spark_lp.itext import IText
-from spark_lp.utils import split_to_sentences, split_to_words, normalize_sent, \
+from .choices import Lang
+from .itext import IText
+from .utils import split_to_sentences, split_to_words, normalize_sent, \
     filter_stop_words, parse_sent, parse_obj_to_dict
 
 

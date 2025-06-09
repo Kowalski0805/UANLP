@@ -1,21 +1,11 @@
 import os
 import time
 
-from pyspark import SparkContext, SQLContext
-from pyspark.conf import SparkConf
 from pyspark.sql.session import SparkSession
-from pyspark.sql.functions import col, udf, current_timestamp, lit
-from pyspark.mllib.feature import HashingTF
-from spark_lp.text_ssdf import TextDataFrame
-from spark_lp.text import Text
+from pyspark.sql.functions import col
 import pyspark.sql.functions as F
-from pyspark.sql.types import FloatType
-from elasticsearch import Elasticsearch, helpers
-from collections import deque
 
-from spark_lp.utils import split_to_words
-
-# Modified speed test for JVM, relying on UDF to process the text via Java (Jmorphy or Morfologik)
+# Modified speed test for CUDA, relying on UDF to process the text via JNI/C++ custom CUDA kernel
 if __name__ == "__main__":
     jars_dir = "./jars"  # Change this to your actual directory
     jars = ",".join([os.path.join(jars_dir, f) for f in os.listdir(jars_dir) if f.endswith(".jar")])
@@ -36,7 +26,26 @@ if __name__ == "__main__":
         .config("spark.sql.session.timeZone", "UTC")
         .config("spark.executorEnv.TZ", "UTC")
         .config("spark.driverEnv.TZ", "UTC")
-        .config("spark.rapids.sql.explain", "ALL")
+        # .config("spark.rapids.sql.explain", "ALL")
+        # .config("spark.rapids.sql.enabled.ops", "")  # Optional but explicit
+        # .config("spark.rapids.sql.exec.Enabled", "false")
+        # .config("spark.rapids.sql.expression.Enabled", "false")
+        # .config("spark.rapids.sql.exec.GenerateExec", "false")       # explode
+        # .config("spark.rapids.sql.expression.StringSplit", "false")  # split
+        # .config("spark.rapids.sql.expression.ConcatWs", "false")     # concat_ws
+        # .config("spark.rapids.sql.expression.CollectList", "false")  # collect_list
+        # .config("spark.rapids.sql.expression.SortOrder", "false")
+        # .config("spark.rapids.sql.exec.ProjectExec", "true")
+        # .config("spark.rapids.sql.exec.AggregateExec", "false")
+        # .config("spark.rapids.sql.exec.FileSourceScanExec", "false")
+        # .config("spark.rapids.sql.exec.DataWritingCommandExec", "false")
+        # .config("spark.rapids.sql.exec.SortMergeJoinExec", "false")
+        # .config("spark.rapids.sql.exec.CoalesceExec", "false")
+        # .config("spark.rapids.sql.exec.SortExec", "false")
+        # .config("spark.rapids.sql.exec.LocalLimitExec", "false")
+        # # Enable GPU only for ScalaUDFs
+        # .config("spark.rapids.sql.udfCompiler.enabled", "true")
+        # .config("spark.rapids.sql.udf.enabled", "true")
         .getOrCreate()
         # .config("spark.rapids.sql.udfCompiler.enabled", "true") \
         # .config("spark.executor.resource.gpu.amount", "1") \
@@ -62,7 +71,7 @@ if __name__ == "__main__":
     #     "author STRING, body STRING, category STRING, date TIMESTAMP, link STRING, title STRING"
     # ).parquet("data_parquet/")
     spark.catalog.clearCache()
-    df = spark.read.parquet("data_parquet/")
+    df = spark.read.parquet("data_parquet/").coalesce(1)
     # df = spark.readStream.format("kafka") \
     # .option("kafka.bootstrap.servers", "kafka:9092") \
     # .option("subscribe", "topic1") \
@@ -71,9 +80,32 @@ if __name__ == "__main__":
     # df = df \
     #     .withColumn("body_vec", F.expr("morfologik(body)")) \
     #     .withColumn("title_vec", F.expr("morfologik(title)"))
-    df = df \
-        .withColumn("body_vec", F.expr("gpu(body)")) \
-        .withColumn("title_vec", F.expr("gpu(title)"))
+    df = df.withColumn("sentence_id", F.monotonically_increasing_id())
+
+    # Explode body
+    df_body = (
+        df
+        .select(
+            col("sentence_id"),
+            F.explode(F.split(col("body"), "\\s+")).alias("word"),
+        )
+        .withColumn("body_vec", F.expr("gpu(word)"))
+        .groupBy("sentence_id")
+        .agg(F.concat_ws(" ", F.collect_list("body_vec")).alias("body_vec"))
+    )
+
+    # Explode title
+    df_title = (
+        df.select(
+            col("sentence_id"),
+            F.explode(F.split(col("title"), "\\s+")).alias("word"),
+        )
+        .withColumn("title_vec", F.expr("gpu(word)"))
+        .groupBy("sentence_id")
+        .agg(F.concat_ws(" ", F.collect_list("title_vec")).alias("title_vec"))
+    )
+
+    df = df.join(df_body, on="sentence_id", how="left").join(df_title, on="sentence_id", how="left")
 
     # def handleRow(d, i):
     #     d.persist()

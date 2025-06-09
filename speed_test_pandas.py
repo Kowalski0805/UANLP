@@ -1,6 +1,8 @@
 import time
 
 from pyspark.sql.session import SparkSession
+
+from spark_lp.text_ssdf import process_pandas_udf
 from spark_lp.text_ssdf import process_udf
 import pyspark.sql.functions as F
 
@@ -21,7 +23,7 @@ if __name__ == "__main__":
     #     ca_certs="/opt/certs/ca/ca.crt")
 
     # spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", True)
-    spark.udf.register("normalize", process_udf)
+    # spark.udf.register("normalize", process_udf)
 
     spark.catalog.clearCache()
     df = spark.read.parquet("data_parquet/")
@@ -48,8 +50,8 @@ if __name__ == "__main__":
 
 
     df = df \
-        .withColumn("body_vec", F.expr("normalize(body)")) \
-        .withColumn("title_vec", F.expr("normalize(title)"))
+        .withColumn("body_vec", process_pandas_udf("body")) \
+        .withColumn("title_vec", process_pandas_udf("title"))
 
     start = time.time()
     df.write.mode("overwrite").parquet("benchmark_output/")

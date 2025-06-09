@@ -21,7 +21,7 @@ if __name__ == "__main__":
 
     df = spark.readStream.schema(
         "author STRING, body STRING, category STRING, date TIMESTAMP, link STRING, title STRING"
-    ).format("json").option("path", "data/").load()
+    ).format("parquet").option("path", "data_parquet/").load()
 
     df = df \
         .withColumn("body_vec", F.expr("process_body(body)")) \

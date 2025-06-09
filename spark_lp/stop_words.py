@@ -1,4 +1,4 @@
-from spark_lp import Lang
+from .choices import Lang
 
 stop_words_dict = {
     Lang.UK: {'a',

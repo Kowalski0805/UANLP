@@ -1,5 +1,5 @@
-from spark_lp.choices import Lang
-from spark_lp.utils import split_to_sentences, split_to_words, normalize_sent, \
+from .choices import Lang
+from .utils import split_to_sentences, split_to_words, normalize_sent, \
     filter_stop_words, get_stop_words
 
 def split_sentences(text):

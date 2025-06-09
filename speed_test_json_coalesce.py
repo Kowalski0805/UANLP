@@ -5,9 +5,6 @@ from pyspark import SparkContext, SQLContext
 from pyspark.conf import SparkConf
 from pyspark.sql.session import SparkSession
 from pyspark.sql.functions import col, udf, current_timestamp, lit
-from pyspark.mllib.feature import HashingTF
-from spark_lp.text_ssdf import TextDataFrame
-from spark_lp.text import Text
 import pyspark.sql.functions as F
 from pyspark.sql.types import FloatType
 from elasticsearch import Elasticsearch, helpers

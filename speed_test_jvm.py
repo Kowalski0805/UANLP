@@ -1,19 +1,8 @@
 import os
 import time
 
-from pyspark import SparkContext, SQLContext
-from pyspark.conf import SparkConf
 from pyspark.sql.session import SparkSession
-from pyspark.sql.functions import col, udf, current_timestamp, lit
-from pyspark.mllib.feature import HashingTF
-from spark_lp.text_ssdf import TextDataFrame
-from spark_lp.text import Text
 import pyspark.sql.functions as F
-from pyspark.sql.types import FloatType
-from elasticsearch import Elasticsearch, helpers
-from collections import deque
-
-from spark_lp.utils import split_to_words
 
 # Modified speed test for JVM, relying on UDF to process the text via Java (Jmorphy or Morfologik)
 if __name__ == "__main__":
@@ -30,12 +19,12 @@ if __name__ == "__main__":
             .config("spark.jars", jars)
             .config("spark.executor.extraLibraryPath", native_path)
             .config("spark.driver.extraLibraryPath", native_path)
-            .config("spark.plugins", "com.nvidia.spark.SQLPlugin")
-            .config("spark.rapids.sql.enabled", "true")
+            # .config("spark.plugins", "com.nvidia.spark.SQLPlugin")
+            # .config("spark.rapids.sql.enabled", "false")
             .config("spark.sql.session.timeZone", "UTC")
             .config("spark.executorEnv.TZ", "UTC")
             .config("spark.driverEnv.TZ", "UTC")
-            .config("spark.rapids.sql.explain", "ALL")
+            # .config("spark.rapids.sql.explain", "ALL")
             .getOrCreate()
         # .config("spark.rapids.sql.udfCompiler.enabled", "true") \
         # .config("spark.executor.resource.gpu.amount", "1") \
@@ -67,12 +56,12 @@ if __name__ == "__main__":
     # .option("subscribe", "topic1") \
     # .load()
 
-    # df = df \
-    #     .withColumn("body_vec", F.expr("morfologik(body)")) \
-    #     .withColumn("title_vec", F.expr("morfologik(title)"))
     df = df \
-        .withColumn("body_vec", F.expr("gpu(body)")) \
-        .withColumn("title_vec", F.expr("gpu(title)"))
+        .withColumn("body_vec", F.expr("morfologik(body)")) \
+        .withColumn("title_vec", F.expr("morfologik(title)"))
+    # df = df \
+    #     .withColumn("body_vec", F.expr("gpu(body)")) \
+    #     .withColumn("title_vec", F.expr("gpu(title)"))
 
     # def handleRow(d, i):
     #     d.persist()

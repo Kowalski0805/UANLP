@@ -115,6 +115,9 @@ data_jsonl_single/
 data_parquet/
 data_parquet_big/
 TMP_DATA/
+benchmark_output/
 jars/
 jars_old/
+
+*.bin
 

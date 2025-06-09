@@ -1,16 +1,13 @@
-import csv
 import re
-import time
 from functools import lru_cache
-from pathlib import Path
 from typing import List, Union, Set, Tuple
 from pymorphy3 import MorphAnalyzer
 from pymorphy3.analyzer import Parse
 import numpy as np
 from pyspark.mllib.linalg import SparseVector
 
-from spark_lp.choices import Lang
-from spark_lp.stop_words import stop_words_dict
+from .choices import Lang
+from .stop_words import stop_words_dict
 
 text_separators = '\\s*[.!?]+\\s*'
 sent_separators = '[,:; \\-—"]+'
