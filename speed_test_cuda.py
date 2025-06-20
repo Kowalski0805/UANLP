@@ -7,25 +7,10 @@ import pyspark.sql.functions as F
 
 # Modified speed test for CUDA, relying on UDF to process the text via JNI/C++ custom CUDA kernel
 if __name__ == "__main__":
-    jars_dir = "./jars"  # Change this to your actual directory
-    jars = ",".join([os.path.join(jars_dir, f) for f in os.listdir(jars_dir) if f.endswith(".jar")])
-    native_path = "./native"
     spark = (
         SparkSession
         .builder
         .appName("speedTest")
-        # .master("spark://spark:7077") \
-        .config("spark.driver.memory", "4g")
-        .config("spark.shuffle.registration.timeout", 15000)
-        .config("spark.jars", jars)
-        .config("spark.executor.extraLibraryPath", native_path)
-        .config("spark.driver.extraLibraryPath", native_path)
-        .config("spark.plugins", "com.nvidia.spark.SQLPlugin")
-        .config("spark.rapids.sql.concurrentGpuTasks", "1")
-        .config("spark.rapids.sql.enabled", "true")
-        .config("spark.sql.session.timeZone", "UTC")
-        .config("spark.executorEnv.TZ", "UTC")
-        .config("spark.driverEnv.TZ", "UTC")
         # .config("spark.rapids.sql.explain", "ALL")
         # .config("spark.rapids.sql.enabled.ops", "")  # Optional but explicit
         # .config("spark.rapids.sql.exec.Enabled", "false")
@@ -80,32 +65,52 @@ if __name__ == "__main__":
     # df = df \
     #     .withColumn("body_vec", F.expr("morfologik(body)")) \
     #     .withColumn("title_vec", F.expr("morfologik(title)"))
-    df = df.withColumn("sentence_id", F.monotonically_increasing_id())
 
-    # Explode body
-    df_body = (
-        df
-        .select(
-            col("sentence_id"),
-            F.explode(F.split(col("body"), "\\s+")).alias("word"),
-        )
-        .withColumn("body_vec", F.expr("gpu(word)"))
-        .groupBy("sentence_id")
-        .agg(F.concat_ws(" ", F.collect_list("body_vec")).alias("body_vec"))
+    # OLD (OVER 9 MINUTES)
+    # df = df.withColumn("sentence_id", F.monotonically_increasing_id())
+    #
+    # # Explode body
+    # df_body = (
+    #     df
+    #     .select(
+    #         col("sentence_id"),
+    #         F.explode(F.split(col("body"), "\\s+")).alias("word"),
+    #     )
+    #     .withColumn("body_vec", F.expr("gpu(word)"))
+    #     .groupBy("sentence_id")
+    #     .agg(F.concat_ws(" ", F.collect_list("body_vec")).alias("body_vec"))
+    # )
+    #
+    # # Explode title
+    # df_title = (
+    #     df.select(
+    #         col("sentence_id"),
+    #         F.explode(F.split(col("title"), "\\s+")).alias("word"),
+    #     )
+    #     .withColumn("title_vec", F.expr("gpu(word)"))
+    #     .groupBy("sentence_id")
+    #     .agg(F.concat_ws(" ", F.collect_list("title_vec")).alias("title_vec"))
+    # )
+    #
+    # df = df.join(df_body, on="sentence_id", how="left").join(df_title, on="sentence_id", how="left")
+
+    # NEW (5 MINUTES, BUT STILL SLOW)
+    # df = df.withColumn(
+    #     "body_vec",
+    #     F.expr("concat_ws(' ', transform(split(body, '\\\\s+'), x -> gpu(x)))")
+    # ).withColumn(
+    #     "title_vec",
+    #     F.expr("concat_ws(' ', transform(split(title, '\\\\s+'), x -> gpu(x)))")
+    # )
+
+    # NEW (10 SECONDS)
+    df = df.withColumn(
+        "body_vec",
+        F.expr("gpu(body)")
+    ).withColumn(
+        "title_vec",
+        F.expr("gpu(title)")
     )
-
-    # Explode title
-    df_title = (
-        df.select(
-            col("sentence_id"),
-            F.explode(F.split(col("title"), "\\s+")).alias("word"),
-        )
-        .withColumn("title_vec", F.expr("gpu(word)"))
-        .groupBy("sentence_id")
-        .agg(F.concat_ws(" ", F.collect_list("title_vec")).alias("title_vec"))
-    )
-
-    df = df.join(df_body, on="sentence_id", how="left").join(df_title, on="sentence_id", how="left")
 
     # def handleRow(d, i):
     #     d.persist()
@@ -126,4 +131,10 @@ if __name__ == "__main__":
     print(f"⏱ Time taken: {end - start:.2f} seconds")
     df.explain()
     df.show()
+
+    import time
+
+    print("💤 Sleeping to keep Spark UI alive at http://localhost:4040")
+    time.sleep(99999)  # or however long you want
+
     # df.writeStream.foreachBatch(handleRow).start().awaitTermination()

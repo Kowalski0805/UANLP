@@ -6,42 +6,16 @@ import pyspark.sql.functions as F
 
 # Modified speed test for JVM, relying on UDF to process the text via Java (Jmorphy or Morfologik)
 if __name__ == "__main__":
-    jars_dir = "./jars"  # Change this to your actual directory
-    jars = ",".join([os.path.join(jars_dir, f) for f in os.listdir(jars_dir) if f.endswith(".jar")])
-    native_path = "./native"
     spark = (
         SparkSession
             .builder
             .appName("speedTest")
-            # .master("spark://spark:7077") \
-            .config("spark.driver.memory", "4g")
-            .config("spark.shuffle.registration.timeout", 15000)
-            .config("spark.jars", jars)
-            .config("spark.executor.extraLibraryPath", native_path)
-            .config("spark.driver.extraLibraryPath", native_path)
-            # .config("spark.plugins", "com.nvidia.spark.SQLPlugin")
-            # .config("spark.rapids.sql.enabled", "false")
-            .config("spark.sql.session.timeZone", "UTC")
-            .config("spark.executorEnv.TZ", "UTC")
-            .config("spark.driverEnv.TZ", "UTC")
-            # .config("spark.rapids.sql.explain", "ALL")
+            .config("spark.rapids.sql.enabled", "false")
             .getOrCreate()
-        # .config("spark.rapids.sql.udfCompiler.enabled", "true") \
-        # .config("spark.executor.resource.gpu.amount", "1") \
-        # .config("spark.executor.resource.gpu.discoveryScript", "/spark_lp/getGpusResources.sh") \
-        # .config("spark.task.resource.gpu.amount", "1") \
-        # .config("spark.executorEnv.CUDA_VISIBLE_DEVICES", "0") \
-        # .config("spark.driver.resource.gpu.amount", "1") \
-        # .config("spark.driver.resource.gpu.discoveryScript", "/spark_lp/getGpusResources.sh") \
     )
 
     spark.udf.registerJavaFunction("morph_analyzer", "org.example.MorphAnalyzerUDF")
     spark.udf.registerJavaFunction("morfologik", "org.example.MorfologikUDF")
-    spark.udf.registerJavaFunction("gpu", "org.example.GPUUDF")
-    # es = Elasticsearch(
-    #     [{'host': 'es01', 'port': 9200, 'scheme': 'https'}],
-    #     basic_auth=("elastic", os.getenv("ELASTIC_PASSWORD")),
-    #     ca_certs="/opt/certs/ca/ca.crt")
 
     # df = spark.readStream.schema(
     #     "author STRING, body STRING, category STRING, date TIMESTAMP, link STRING, title STRING"
@@ -59,9 +33,6 @@ if __name__ == "__main__":
     df = df \
         .withColumn("body_vec", F.expr("morfologik(body)")) \
         .withColumn("title_vec", F.expr("morfologik(title)"))
-    # df = df \
-    #     .withColumn("body_vec", F.expr("gpu(body)")) \
-    #     .withColumn("title_vec", F.expr("gpu(title)"))
 
     # def handleRow(d, i):
     #     d.persist()
@@ -82,4 +53,10 @@ if __name__ == "__main__":
     print(f"⏱ Time taken: {end - start:.2f} seconds")
     df.explain()
     df.show()
+
+    import time
+
+    print("💤 Sleeping to keep Spark UI alive at http://localhost:4040")
+    time.sleep(99999)  # or however long you want
+
     # df.writeStream.foreachBatch(handleRow).start().awaitTermination()

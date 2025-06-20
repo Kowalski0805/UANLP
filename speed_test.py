@@ -9,10 +9,6 @@ if __name__ == "__main__":
     spark = SparkSession \
         .builder \
         .appName("speedTest") \
-        .master("local[*]") \
-        .config("spark.executor.heartbeatInterval", "3500s") \
-        .config("spark.network.timeout", "3600s") \
-        .config("spark.shuffle.registration.timeout", 15000) \
         .getOrCreate()
 
     # es = Elasticsearch(
@@ -58,6 +54,10 @@ if __name__ == "__main__":
     df.explain()
     df.show()
 
+    import time
+
+    print("💤 Sleeping to keep Spark UI alive at http://localhost:4040")
+    time.sleep(99999)  # or however long you want
     # df.writeStream.format("console").start().awaitTermination()
 
     # df.writeStream.foreachBatch(handleRow).start().awaitTermination()

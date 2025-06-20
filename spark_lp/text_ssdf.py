@@ -1,6 +1,6 @@
 import re
 
-import pandas as pd
+# import pandas as pd
 from pyspark.sql.functions import col, udf, current_timestamp
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType
 
@@ -28,30 +28,30 @@ text_separators = r"[.!?…]+"  # or import if you defined it elsewhere
 sent_separators = r"[^\w’ʼґєіїа-яА-Яa-zA-Z0-9]+"  # Ukrainian word split
 
 
-@pandas_udf(ArrayType(ArrayType(StringType())))
-def process_pandas_udf(texts: pd.Series) -> pd.Series:
-    lang = Lang.UK
-    stop_words = get_stop_words(lang)
-
-    def process(text: str):
-        if pd.isna(text) or not text.strip():
-            return []
-
-        # Clean text
-        text = re.sub('\n+', ' ', text)
-        text = re.sub(r'\s+', ' ', text)
-
-        # Split to sentences
-        sentences = [s for s in re.split(text_separators, text) if s]
-
-        # For each sentence
-        result = []
-        for sent in sentences:
-            words = [w for w in re.split(sent_separators, sent) if w]
-            normed = [morphs[lang].parse(w.lower())[0].normal_form for w in words]
-            filtered = [w for w in normed if w not in stop_words]
-            result.append(filtered)
-
-        return result
-
-    return texts.apply(process)
+# @pandas_udf(ArrayType(ArrayType(StringType())))
+# def process_pandas_udf(texts: pd.Series) -> pd.Series:
+#     lang = Lang.UK
+#     stop_words = get_stop_words(lang)
+#
+#     def process(text: str):
+#         if pd.isna(text) or not text.strip():
+#             return []
+#
+#         # Clean text
+#         text = re.sub('\n+', ' ', text)
+#         text = re.sub(r'\s+', ' ', text)
+#
+#         # Split to sentences
+#         sentences = [s for s in re.split(text_separators, text) if s]
+#
+#         # For each sentence
+#         result = []
+#         for sent in sentences:
+#             words = [w for w in re.split(sent_separators, sent) if w]
+#             normed = [morphs[lang].parse(w.lower())[0].normal_form for w in words]
+#             filtered = [w for w in normed if w not in stop_words]
+#             result.append(filtered)
+#
+#         return result
+#
+#     return texts.apply(process)
