@@ -1,4 +1,3 @@
-import os
 import time
 
 from pyspark.sql.session import SparkSession
@@ -17,36 +16,13 @@ if __name__ == "__main__":
     spark.udf.registerJavaFunction("morph_analyzer", "org.example.MorphAnalyzerUDF")
     spark.udf.registerJavaFunction("morfologik", "org.example.MorfologikUDF")
 
-    # df = spark.readStream.schema(
-    #     "author STRING, body STRING, category STRING, date TIMESTAMP, link STRING, title STRING"
-    # ).format("json").option("path", "data/").load()
-    # df = spark.readStream.schema(
-    #     "author STRING, body STRING, category STRING, date TIMESTAMP, link STRING, title STRING"
-    # ).parquet("data_parquet/")
     spark.catalog.clearCache()
-    df = spark.read.parquet("data_parquet/")
-    # df = spark.readStream.format("kafka") \
-    # .option("kafka.bootstrap.servers", "kafka:9092") \
-    # .option("subscribe", "topic1") \
-    # .load()
+    df = spark.read.parquet("data_parquet_big/")
 
     df = df \
         .withColumn("body_vec", F.expr("morfologik(body)")) \
         .withColumn("title_vec", F.expr("morfologik(title)"))
 
-    # def handleRow(d, i):
-    #     d.persist()
-    #     rows = d.withColumn("ingestion_time", current_timestamp()) \
-    #         .withColumn("_id", col("link")) \
-    #         .withColumn("_op_type", lit("create")) \
-    #         .rdd.map(lambda r: r.asDict(True)).collect()
-    #     deque(helpers.parallel_bulk(es, rows, index="news", ignore_status=409), maxlen=0)
-    #     # res = helpers.bulk()
-    #     print("Batch #" + str(i) + " uploaded")
-    #     d.unpersist()
-
-
-    # df.writeStream.format("console").start().awaitTermination()
     start = time.time()
     df.write.mode("overwrite").parquet("benchmark_output/")
     end = time.time()
@@ -54,9 +30,5 @@ if __name__ == "__main__":
     df.explain()
     df.show()
 
-    import time
-
     print("💤 Sleeping to keep Spark UI alive at http://localhost:4040")
     time.sleep(99999)  # or however long you want
-
-    # df.writeStream.foreachBatch(handleRow).start().awaitTermination()

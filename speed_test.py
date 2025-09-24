@@ -1,51 +1,44 @@
 import time
 
+from pyspark.sql.functions import udf
 from pyspark.sql.session import SparkSession
+from pyspark.sql.types import StringType
+
 from spark_lp.text_ssdf import process_udf
 import pyspark.sql.functions as F
 
 # Standard speed test from master's thesis, relying on UDF to process the text via pymorphy3
 if __name__ == "__main__":
-    spark = SparkSession \
-        .builder \
-        .appName("speedTest") \
-        .getOrCreate()
+    spark = (
+        SparkSession
+            .builder
+            .appName("speedTest")
+            # .config("spark.rapids.sql.enabled", "false")
+            .getOrCreate()
+    )
 
-    # es = Elasticsearch(
-    #     [{'host': 'es01', 'port': 9200, 'scheme': 'https'}],
-    #     basic_auth=("elastic", os.getenv("ELASTIC_PASSWORD")),
-    #     ca_certs="/opt/certs/ca/ca.crt")
+    @udf(returnType=StringType())
+    def noop(text):
+        return text
 
     # spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", True)
     spark.udf.register("normalize", process_udf)
+    spark.udf.register("noop", noop)
 
     spark.catalog.clearCache()
-    df = spark.read.parquet("data_parquet/")
+    df = spark.read.parquet("data_parquet_big/")
 
-    # df = spark.readStream.schema(
-    #     "author STRING, body STRING, category STRING, date TIMESTAMP, link STRING, title STRING"
-    # ).format("parquet").option("path", "data_parquet/").load()
+    # df = df \
+    #     .withColumn("body_vec", F.expr("normalize(body)")) \
+    #     .withColumn("title_vec", F.expr("normalize(title)"))
 
-    # df = spark.readStream.format("kafka") \
-    # .option("kafka.bootstrap.servers", "kafka:9092") \
-    # .option("subscribe", "topic1") \
-    # .load()
-
-    # def handleRow(d, i):
-    #     d.persist()
-    #     rows = d.withColumn("ingestion_time", current_timestamp()) \
-    #         .withColumn("_id", col("link")) \
-    #         .withColumn("_op_type", lit("create")) \
-    #         .rdd.map(lambda r: r.asDict(True)).collect()
-    #     deque(helpers.parallel_bulk(es, rows, index="news", ignore_status=409), maxlen=0)
-    #     # res = helpers.bulk()
-    #     print("Batch #" + str(i) + " uploaded")
-    #     d.unpersist()
-
+    # df = df \
+    #     .withColumn("body_vec", F.expr("noop(body)")) \
+    #     .withColumn("title_vec", F.expr("noop(title)"))
 
     df = df \
-        .withColumn("body_vec", F.expr("normalize(body)")) \
-        .withColumn("title_vec", F.expr("normalize(title)"))
+        .withColumn("body_vec", F.col("body")) \
+        .withColumn("title_vec", F.col("title"))
 
     start = time.time()
     df.write.mode("overwrite").parquet("benchmark_output/")
@@ -54,14 +47,5 @@ if __name__ == "__main__":
     df.explain()
     df.show()
 
-    import time
-
     print("💤 Sleeping to keep Spark UI alive at http://localhost:4040")
     time.sleep(99999)  # or however long you want
-    # df.writeStream.format("console").start().awaitTermination()
-
-    # df.writeStream.foreachBatch(handleRow).start().awaitTermination()
-    # text = TextDataFrame(spark, df)
-    # text.process_once()
-    # text.words.writeStream.format("console").start().awaitTermination()
-    # text.words.writeStream.foreachBatch(handleRow).start().awaitTermination()
