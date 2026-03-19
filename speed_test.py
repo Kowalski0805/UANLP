@@ -13,7 +13,7 @@ if __name__ == "__main__":
         SparkSession
             .builder
             .appName("speedTest")
-            # .config("spark.rapids.sql.enabled", "false")
+            .config("spark.rapids.sql.enabled", "false")
             .getOrCreate()
     )
 
@@ -21,31 +21,31 @@ if __name__ == "__main__":
     def noop(text):
         return text
 
-    # spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", True)
+    spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", True)
     spark.udf.register("normalize", process_udf)
     spark.udf.register("noop", noop)
 
     spark.catalog.clearCache()
-    df = spark.read.parquet("data_parquet_big/")
+    df = spark.read.parquet("data_parquet/")
 
-    # df = df \
-    #     .withColumn("body_vec", F.expr("normalize(body)")) \
-    #     .withColumn("title_vec", F.expr("normalize(title)"))
+    df = df \
+        .withColumn("body_vec", F.expr("normalize(body)")) \
+        .withColumn("title_vec", F.expr("normalize(title)"))
 
     # df = df \
     #     .withColumn("body_vec", F.expr("noop(body)")) \
     #     .withColumn("title_vec", F.expr("noop(title)"))
 
-    df = df \
-        .withColumn("body_vec", F.col("body")) \
-        .withColumn("title_vec", F.col("title"))
+    # df = df \
+    #     .withColumn("body_vec", F.col("body")) \
+    #     .withColumn("title_vec", F.col("title"))
 
     start = time.time()
     df.write.mode("overwrite").parquet("benchmark_output/")
     end = time.time()
     print(f"⏱ Time taken: {end - start:.2f} seconds")
     df.explain()
-    df.show()
+    print(df.tail(20))
 
     print("💤 Sleeping to keep Spark UI alive at http://localhost:4040")
     time.sleep(99999)  # or however long you want

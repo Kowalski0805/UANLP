@@ -17,7 +17,7 @@ if __name__ == "__main__":
     spark.udf.registerJavaFunction("morfologik", "org.example.MorfologikUDF")
 
     spark.catalog.clearCache()
-    df = spark.read.parquet("data_parquet_big/")
+    df = spark.read.parquet("data_parquet/")
 
     df = df \
         .withColumn("body_vec", F.expr("morfologik(body)")) \
@@ -28,7 +28,7 @@ if __name__ == "__main__":
     end = time.time()
     print(f"⏱ Time taken: {end - start:.2f} seconds")
     df.explain()
-    df.show()
+    print(df.tail(20))
 
     print("💤 Sleeping to keep Spark UI alive at http://localhost:4040")
     time.sleep(99999)  # or however long you want

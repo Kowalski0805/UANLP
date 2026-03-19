@@ -69,8 +69,8 @@ if __name__ == "__main__":
     df.write.mode("overwrite").parquet("benchmark_output/")
     end = time.time()
     print(f"⏱ Time taken: {end - start:.2f} seconds")
-    df.explain()
-    df.show()
-
-    print("💤 Sleeping to keep Spark UI alive at http://localhost:4040")
-    time.sleep(99999)  # or however long you want
+    # df.explain()
+    # df.show()
+    #
+    # print("💤 Sleeping to keep Spark UI alive at http://localhost:4040")
+    # time.sleep(99999)  # or however long you want
